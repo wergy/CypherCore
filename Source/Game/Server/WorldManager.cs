@@ -49,6 +49,7 @@ namespace Game
             _realm = new Realm();
 
             _worldUpdateTime = new WorldUpdateTime();
+            _warnShutdownTime = Time.UnixTime;
         }
 
         public Player FindPlayerInZone(uint zone)
@@ -90,6 +91,61 @@ namespace Game
         public List<string> GetMotd()
         {
             return m_motd;
+        }
+
+        public void TriggerGuidWarning()
+        {
+            // Lock this only to prevent multiple maps triggering at the same time
+            lock (_guidAlertLock)
+            {
+                long gameTime = GameTime.GetGameTime();
+                long today = (gameTime / Time.Day) * Time.Day;
+
+                // Check if our window to restart today has passed. 5 mins until quiet time
+                while (gameTime >= (today + (WorldConfig.GetIntValue(WorldCfg.RespawnRestartQuietTime) * Time.Hour) - 1810))
+                    today += Time.Day;
+
+                // Schedule restart for 30 minutes before quiet time, or as long as we have
+                _warnShutdownTime = today + (WorldConfig.GetIntValue(WorldCfg.RespawnRestartQuietTime) * Time.Hour) - 1800;
+
+                _guidWarn = true;
+                SendGuidWarning();
+            }
+        }
+
+        public void TriggerGuidAlert()
+        {
+            // Lock this only to prevent multiple maps triggering at the same time
+            lock (_guidAlertLock)
+            {
+                DoGuidAlertRestart();
+                _guidAlert = true;
+                _guidWarn = false;
+            }
+        }
+
+        void DoGuidWarningRestart()
+        {
+            if (m_ShutdownTimer != 0)
+                return;
+
+            ShutdownServ(1800, ShutdownMask.Restart, ShutdownExitCode.Restart);
+            _warnShutdownTime += Time.Hour;
+        }
+
+        void DoGuidAlertRestart()
+        {
+            if (m_ShutdownTimer != 0)
+                return;
+
+            ShutdownServ(300, ShutdownMask.Restart, ShutdownExitCode.Restart, _alertRestartReason);
+        }
+
+        void SendGuidWarning()
+        {
+            if (m_ShutdownTimer == 0 && _guidWarn && WorldConfig.GetIntValue(WorldCfg.RespawnGuidWarningFrequency) > 0)
+                SendServerMessage(ServerMessageType.String, _guidWarningMsg);
+            _warnDiff = 0;
         }
 
         public WorldSession FindSession(uint id)
@@ -527,6 +583,12 @@ namespace Game
             Log.outInfo(LogFilter.ServerLoading, "Loading Creature Base Stats...");
             Global.ObjectMgr.LoadCreatureClassLevelStats();
 
+            Log.outInfo(LogFilter.ServerLoading, "Loading Spawn Group Templates...");
+            Global.ObjectMgr.LoadSpawnGroupTemplates();
+
+            Log.outInfo(LogFilter.ServerLoading, "Loading instance spawn groups...");
+            Global.ObjectMgr.LoadInstanceSpawnGroups();
+
             Log.outInfo(LogFilter.ServerLoading, "Loading Creature Data...");
             Global.ObjectMgr.LoadCreatures();
 
@@ -543,7 +605,10 @@ namespace Game
             Global.ObjectMgr.LoadCreatureAddons();
 
             Log.outInfo(LogFilter.ServerLoading, "Loading GameObjects...");
-            Global.ObjectMgr.LoadGameobjects();
+            Global.ObjectMgr.LoadGameObjects();
+
+            Log.outInfo(LogFilter.ServerLoading, "Loading Spawn Group Data...");
+            Global.ObjectMgr.LoadSpawnGroups();
 
             Log.outInfo(LogFilter.ServerLoading, "Loading GameObject Addon Data...");
             Global.ObjectMgr.LoadGameObjectAddons();                          // must be after LoadGameObjectTemplate() and LoadGameobjects()
@@ -749,14 +814,14 @@ namespace Game
             Log.outInfo(LogFilter.ServerLoading, "Loading Trainers...");
             Global.ObjectMgr.LoadTrainers();                                // must be after load CreatureTemplate
 
-            Log.outInfo(LogFilter.ServerLoading, "Loading Creature default trainers...");
-            Global.ObjectMgr.LoadCreatureDefaultTrainers();
-
             Log.outInfo(LogFilter.ServerLoading, "Loading Gossip menu...");
             Global.ObjectMgr.LoadGossipMenu();
 
             Log.outInfo(LogFilter.ServerLoading, "Loading Gossip menu options...");
-            Global.ObjectMgr.LoadGossipMenuItems();                         // must be after LoadTrainers
+            Global.ObjectMgr.LoadGossipMenuItems();
+
+            Log.outInfo(LogFilter.ServerLoading, "Loading Creature trainers...");
+            Global.ObjectMgr.LoadCreatureTrainers();                         // must be after LoadGossipMenuItems
 
             Log.outInfo(LogFilter.ServerLoading, "Loading Vendors...");
             Global.ObjectMgr.LoadVendors();                                  // must be after load CreatureTemplate and ItemTemplate
@@ -1083,6 +1148,9 @@ namespace Game
             m_visibility_notify_periodInInstances = ConfigMgr.GetDefaultValue("Visibility.Notify.Period.InInstances", SharedConst.DefaultVisibilityNotifyPeriod);
             m_visibility_notify_periodInBGArenas = ConfigMgr.GetDefaultValue("Visibility.Notify.Period.InBGArenas", SharedConst.DefaultVisibilityNotifyPeriod);
 
+            _guidWarningMsg = WorldConfig.GetDefaultValue("Respawn.WarningMessage", "There will be an unscheduled server restart at 03:00. The server will be available again shortly after.");
+            _alertRestartReason = WorldConfig.GetDefaultValue("Respawn.AlertRestartReason", "Urgent Maintenance");
+
             string dataPath = ConfigMgr.GetDefaultValue("DataDir", "./");
             if (reload)
             {
@@ -1331,6 +1399,16 @@ namespace Game
 
             // update the instance reset times
             Global.InstanceSaveMgr.Update();
+
+            // Check for shutdown warning
+            if (_guidWarn && !_guidAlert)
+            {
+                _warnDiff += diff;
+                if (GameTime.GetGameTime() >= _warnShutdownTime)
+                    DoGuidWarningRestart();
+                else if (_warnDiff > WorldConfig.GetIntValue(WorldCfg.RespawnGuidWarningFrequency) * Time.InMilliseconds)
+                    SendGuidWarning();
+            }
 
             Global.ScriptMgr.OnWorldUpdate(diff);
         }
@@ -2075,13 +2153,12 @@ namespace Game
         {
             var DBVersion = "Unknown world database.";
 
-            SQLResult result = DB.World.Query("SELECT db_version, cache_id, hotfix_cache_id FROM version LIMIT 1");
+            SQLResult result = DB.World.Query("SELECT db_version, cache_id FROM version LIMIT 1");
             if (!result.IsEmpty())
             {
                 DBVersion = result.Read<string>(0);
                 // will be overwrite by config values if different and non-0
                 WorldConfig.SetValue(WorldCfg.ClientCacheVersion, result.Read<uint>(1));
-                WorldConfig.SetValue(WorldCfg.HotfixCacheVersion, result.Read<uint>(2));
             }
 
             return DBVersion;
@@ -2289,6 +2366,9 @@ namespace Game
         public CleaningFlags GetCleaningFlags() { return m_CleaningFlags; }
         public void SetCleaningFlags(CleaningFlags flags) { m_CleaningFlags = flags; }
 
+        public bool IsGuidWarning() { return _guidWarn; }
+        public bool IsGuidAlert() { return _guidAlert; }
+
         public WorldUpdateTime GetWorldUpdateTime() { return _worldUpdateTime; }
 
         #region Fields
@@ -2350,6 +2430,16 @@ namespace Game
         string _dataPath;
 
         WorldUpdateTime _worldUpdateTime;
+
+        string _guidWarningMsg;
+        string _alertRestartReason;
+
+        object _guidAlertLock = new object();
+
+        bool _guidWarn;
+        bool _guidAlert;
+        uint _warnDiff;
+        long _warnShutdownTime;
         #endregion
     }
 

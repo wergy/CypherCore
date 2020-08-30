@@ -16,16 +16,16 @@
  */
 
 using Framework.Constants;
+using Framework.Dynamic;
 using Framework.GameMath;
 using Game.BattleGrounds;
 using Game.DataStorage;
 using Game.Maps;
 using Game.Movement;
 using Game.Networking.Packets;
+using Game.Spells;
 using System;
 using System.Collections.Generic;
-using Game.Spells;
-using Framework.Dynamic;
 
 namespace Game.Entities
 {
@@ -157,6 +157,28 @@ namespace Game.Entities
 
             MoveSplineInit init = new MoveSplineInit(this);
             init.Stop();
+        }
+
+        public void PauseMovement(uint timer = 0, MovementSlot slot = 0)
+        {
+            if (slot >= MovementSlot.Max)
+                return;
+
+            IMovementGenerator movementGenerator = GetMotionMaster().GetMotionSlot(slot);
+            if (movementGenerator != null)
+                movementGenerator.Pause(timer);
+
+            StopMoving();
+        }
+
+        public void ResumeMovement(uint timer = 0, MovementSlot slot = 0)
+        {
+            if (slot >= MovementSlot.Max)
+                return;
+
+            IMovementGenerator movementGenerator = GetMotionMaster().GetMotionSlot(slot);
+            if (movementGenerator != null)
+                movementGenerator.Resume(timer);
         }
 
         public void SetInFront(WorldObject target)
@@ -779,7 +801,8 @@ namespace Game.Entities
             {
                 if (_lastLiquid != null && _lastLiquid.SpellID != 0)
                     RemoveAurasDueToSpell(_lastLiquid.SpellID);
-                if (curLiquid != null && curLiquid.SpellID != 0)
+                Player player = GetCharmerOrOwnerPlayerOrPlayerItself();
+                if (curLiquid != null && curLiquid.SpellID != 0 && (!player || !player.IsGameMaster()))
                     CastSpell(this, curLiquid.SpellID, true);
                 _lastLiquid = curLiquid;
             }

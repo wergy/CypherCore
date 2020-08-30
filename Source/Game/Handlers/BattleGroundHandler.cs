@@ -39,7 +39,8 @@ namespace Game
                 return;
 
             // Stop the npc if moving
-            unit.StopMoving();
+            unit.PauseMovement(WorldConfig.GetUIntValue(WorldCfg.CreatureStopForPlayer));
+            unit.SetHomePosition(unit.GetPosition());
 
             BattlegroundTypeId bgTypeId = Global.BattlegroundMgr.GetBattleMasterBG(unit.GetEntry());
 

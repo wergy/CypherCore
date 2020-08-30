@@ -95,7 +95,8 @@ namespace Game.Entities
             IsInWorld = true;
             ClearUpdateMask(true);
 
-            GetMap().GetZoneAndAreaId(_phaseShift, out m_zoneId, out m_areaId, GetPositionX(), GetPositionY(), GetPositionZ());
+            if (GetMap() != null)
+                GetMap().GetZoneAndAreaId(_phaseShift, out m_zoneId, out m_areaId, GetPositionX(), GetPositionY(), GetPositionZ());
         }
 
         public virtual void RemoveFromWorld()
@@ -1730,16 +1731,14 @@ namespace Game.Entities
 
         public virtual uint GetLevelForTarget(WorldObject target) { return 1; }
 
-        public virtual void SaveRespawnTime() { }
+        public virtual void SaveRespawnTime(uint forceDelay = 0, bool saveToDB = true) { }
 
         public ZoneScript GetZoneScript() { return m_zoneScript; }
 
         public void AddToNotify(NotifyFlags f) { m_notifyflags |= f; }
         public bool IsNeedNotify(NotifyFlags f) { return Convert.ToBoolean(m_notifyflags & f); }
         NotifyFlags GetNotifyFlags() { return m_notifyflags; }
-        bool NotifyExecuted(NotifyFlags f) { return Convert.ToBoolean(m_executed_notifies & f); }
-        void SetNotified(NotifyFlags f) { m_executed_notifies |= f; }
-        public void ResetAllNotifies() { m_notifyflags = 0; m_executed_notifies = 0; }
+        public void ResetAllNotifies() { m_notifyflags = 0; }
 
         public bool IsActiveObject() { return m_isActive; }
         public bool IsPermanentWorldObject() { return m_isWorldObject; }
@@ -1771,7 +1770,7 @@ namespace Game.Entities
         public virtual bool IsInvisibleDueToDespawn() { return false; }
         public virtual bool IsAlwaysDetectableFor(WorldObject seer) { return false; }
 
-        public virtual bool LoadFromDB(ulong guid, Map map) { return true; }
+        public virtual bool LoadFromDB(ulong spawnId, Map map, bool addToMap, bool allowDuplicate) { return true; }
 
         //Position
 
@@ -2362,7 +2361,6 @@ namespace Game.Entities
         public bool IsInWorld { get; set; }
 
         NotifyFlags m_notifyflags;
-        NotifyFlags m_executed_notifies;
 
         public FlaggedArray<StealthType> m_stealth = new FlaggedArray<StealthType>(2);
         public FlaggedArray<StealthType> m_stealthDetect = new FlaggedArray<StealthType>(2);

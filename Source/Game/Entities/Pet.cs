@@ -1028,24 +1028,22 @@ namespace Game.Entities
             if (petSpell != null)
             {
                 if (petSpell.state == PetSpellState.Removed)
-                {
-                    m_spells.Remove(spellId);
                     state = PetSpellState.Changed;
-                }
-                else if (state == PetSpellState.Unchanged && petSpell.state != PetSpellState.Unchanged)
-                {
-                    // can be in case spell loading but learned at some previous spell loading
-                    petSpell.state = PetSpellState.Unchanged;
-
-                    if (active == ActiveStates.Enabled)
-                        ToggleAutocast(spellInfo, true);
-                    else if (active == ActiveStates.Disabled)
-                        ToggleAutocast(spellInfo, false);
-
-                    return false;
-                }
                 else
-                    return false;
+                {
+                    if (state == PetSpellState.Unchanged && petSpell.state != PetSpellState.Unchanged)
+                    {
+                        // can be in case spell loading but learned at some previous spell loading
+                        petSpell.state = PetSpellState.Unchanged;
+
+                        if (active == ActiveStates.Enabled)
+                            ToggleAutocast(spellInfo, true);
+                        else if (active == ActiveStates.Disabled)
+                            ToggleAutocast(spellInfo, false);
+
+                        return false;
+                    }
+                }
             }
 
             PetSpell newspell = new PetSpell();
@@ -1235,7 +1233,7 @@ namespace Game.Entities
             }
 
             // if remove last rank or non-ranked then update action bar at server and client if need
-            if (GetCharmInfo().RemoveSpellFromActionBar(spellId) && !learnPrev && clearActionBar)
+            if (clearActionBar && !learnPrev && GetCharmInfo().RemoveSpellFromActionBar(spellId))
             {
                 if (!m_loading)
                 {

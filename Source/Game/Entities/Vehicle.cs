@@ -124,7 +124,8 @@ namespace Game.Entities
             Log.outDebug(LogFilter.Vehicle, "Vehicle.Reset (Entry: {0}, GuidLow: {1}, DBGuid: {2})", GetCreatureEntry(), _me.GetGUID().ToString(), _me.ToCreature().GetSpawnId());
 
             ApplyAllImmunities();
-            InstallAllAccessories(evading);
+            if (GetBase().IsAlive())
+                InstallAllAccessories(evading);
 
             Global.ScriptMgr.OnReset(this);
         }
@@ -557,6 +558,13 @@ namespace Game.Entities
 
             Target.RemovePendingEventsForSeat(Seat.Key);
             Target.RemovePendingEventsForPassenger(Passenger);
+
+            // Passenger might've died in the meantime - abort if this is the case
+            if (!Passenger.IsAlive())
+            {
+                Abort(0);
+                return true;
+            }
 
             Passenger.SetVehicle(Target);
             Seat.Value.Passenger.Guid = Passenger.GetGUID();

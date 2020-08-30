@@ -111,6 +111,85 @@ namespace Game.AI
             source.PlayDirectSound(soundId);
         }
 
+        /// <summary>
+        /// Add specified amount of threat directly to victim (ignores redirection effects) - also puts victim in combat and engages them if necessary
+        /// </summary>
+        /// <param name="victim"></param>
+        /// <param name="amount"></param>
+        /// <param name="who"></param>
+        public void AddThreat(Unit victim, float amount, Unit who = null)
+        {
+            if (!victim)
+                return;
+
+            if (!who)
+                who = me;
+
+            who.GetThreatManager().AddThreat(victim, amount, null, true, true);
+        }
+
+        /// <summary>
+        /// Adds/removes the specified percentage from the specified victim's threat (to who, or me if not specified)
+        /// </summary>
+        /// <param name="victim"></param>
+        /// <param name="pct"></param>
+        /// <param name="who"></param>
+        public void ModifyThreatByPercent(Unit victim, int pct, Unit who = null)
+        {
+            if (!victim)
+                return;
+
+            if (!who)
+                who = me;
+
+            who.GetThreatManager().ModifyThreatByPercent(victim, pct);
+        }
+
+        /// <summary>
+        /// Resets the victim's threat level to who (or me if not specified) to zero
+        /// </summary>
+        /// <param name="victim"></param>
+        /// <param name="who"></param>
+        void ResetThreat(Unit victim, Unit who)
+        {
+            if (!victim)
+                return;
+
+            if (!who)
+                who = me;
+
+            who.GetThreatManager().ResetThreat(victim);
+        }
+
+        /// <summary>
+        /// Resets the specified unit's threat list (me if not specified) - does not delete entries, just sets their threat to zero
+        /// </summary>
+        /// <param name="who"></param>
+        public void ResetThreatList(Unit who = null)
+        {
+            if (!who)
+                who = me;
+
+            who.GetThreatManager().ResetAllThreat();
+        }
+
+        /// <summary>
+        /// Returns the threat level of victim towards who (or me if not specified)
+        /// </summary>
+        /// <param name="victim"></param>
+        /// <param name="who"></param>
+        /// <returns></returns>
+        public float GetThreat(Unit victim, Unit who = null)
+        {
+            if (!victim)
+                return 0.0f;
+
+            if (!who)
+                who = me;
+
+            return who.GetThreatManager().GetThreat(victim);
+        }
+        
         //Spawns a creature relative to me
         public Creature DoSpawnCreature(uint entry, float offsetX, float offsetY, float offsetZ, float angle, TempSummonType type, uint despawntime)
         {
@@ -180,39 +259,6 @@ namespace Game.AI
                 return null;
 
             return apSpell[RandomHelper.IRand(0, (int)(spellCount - 1))];
-        }
-
-        //Drops all threat to 0%. Does not remove players from the threat list
-        public void DoResetThreat()
-        {
-            if (!me.CanHaveThreatList() || me.GetThreatManager().IsThreatListEmpty())
-            {
-                Log.outError(LogFilter.Scripts, "DoResetThreat called for creature that either cannot have threat list or has empty threat list (me entry = {0})", me.GetEntry());
-                return;
-            }
-
-            var threatlist = me.GetThreatManager().GetThreatList();
-
-            foreach (var refe in threatlist)
-            {
-                Unit unit = Global.ObjAccessor.GetUnit(me, refe.GetUnitGuid());
-                if (unit != null && DoGetThreat(unit) != 0)
-                    DoModifyThreatPercent(unit, -100);
-            }
-        }
-
-        public float DoGetThreat(Unit unit)
-        {
-            if (unit == null)
-                return 0.0f;
-            return me.GetThreatManager().GetThreat(unit);
-        }
-
-        public void DoModifyThreatPercent(Unit unit, int pct)
-        {
-            if (unit == null)
-                return;
-            me.GetThreatManager().ModifyThreatPercent(unit, pct);
         }
 
         void DoTeleportTo(float x, float y, float z, uint time = 0)
@@ -449,7 +495,7 @@ namespace Game.AI
             _events.Reset();
             summons.DespawnAll();
             _scheduler.CancelAll();
-            if (instance != null)
+            if (instance != null && instance.GetBossState(_bossId) != EncounterState.Done)
                 instance.SetBossState(_bossId, EncounterState.NotStarted);
         }
 
@@ -499,7 +545,7 @@ namespace Game.AI
         public override void JustSummoned(Creature summon)
         {
             summons.Summon(summon);
-            if (me.IsInCombat())
+            if (me.IsEngaged())
                 DoZoneInCombat(summon);
         }
 
@@ -530,12 +576,14 @@ namespace Game.AI
             DoMeleeAttackIfReady();
         }
 
-        public void _DespawnAtEvade(uint delayToRespawn = 30, Creature who = null)
+        public void _DespawnAtEvade(uint delayToRespawn = 30, Creature who = null) { _DespawnAtEvade(TimeSpan.FromSeconds(delayToRespawn), who); }
+
+        public void _DespawnAtEvade(TimeSpan delayToRespawn, Creature who = null)
         {
-            if (delayToRespawn < 2)
+            if (delayToRespawn < TimeSpan.FromSeconds(2))
             {
                 Log.outError(LogFilter.Scripts, "_DespawnAtEvade called with delay of {0} seconds, defaulting to 2.", delayToRespawn);
-                delayToRespawn = 2;
+                delayToRespawn = TimeSpan.FromSeconds(2);
             }
 
             if (!who)
@@ -549,7 +597,7 @@ namespace Game.AI
                 return;
             }
 
-            who.DespawnOrUnsummon(0, TimeSpan.FromSeconds(delayToRespawn));
+            who.DespawnOrUnsummon(0, delayToRespawn);
 
             if (instance != null && who == me)
                 instance.SetBossState(_bossId, EncounterState.Fail);

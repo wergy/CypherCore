@@ -96,7 +96,7 @@ namespace Scripts.Northrend.IcecrownCitadel
 
             CreatureData data = creature.GetCreatureData();
             if (data != null)
-                creature.UpdatePosition(data.posX, data.posY, data.posZ, data.orientation);
+                creature.UpdatePosition(data.spawnPoint);
             creature.DespawnOrUnsummon();
 
             creature.SetCorpseDelay(corpseDelay);
@@ -496,7 +496,7 @@ namespace Scripts.Northrend.IcecrownCitadel
                 Creature crusader = ObjectAccessor.GetCreature(me, instance.GetGuidData(DataTypes.CaptainArnath + i));
                 if (crusader)
                 {
-                    if (crusader.IsAlive() && crusader.GetEntry() == crusader.GetCreatureData().id)
+                    if (crusader.IsAlive() && crusader.GetEntry() == crusader.GetCreatureData().Id)
                     {
                         crusader.m_Events.AddEvent(new CaptainSurviveTalk(crusader), crusader.m_Events.CalculateTime(delay));
                         delay += 6000;
@@ -646,7 +646,7 @@ namespace Scripts.Northrend.IcecrownCitadel
                         Talk(Texts.SaySvalnaAggro);
                         break;
                     case EventTypes.ImpalingSpear:
-                        Unit target = SelectTarget(SelectAggroTarget.Random, 1, 0.0f, true, -(int)InstanceSpells.ImpalingSpear);
+                        Unit target = SelectTarget(SelectAggroTarget.Random, 1, 0.0f, true, true, -(int)InstanceSpells.ImpalingSpear);
                         if (target)
                         {
                             DoCast(me, InstanceSpells.AetherShield);
@@ -666,7 +666,7 @@ namespace Scripts.Northrend.IcecrownCitadel
     }
 
     [Script]
-    class npc_crok_scourgebane : NpcEscortAI
+    class npc_crok_scourgebane : EscortAI
     {
         public npc_crok_scourgebane(Creature creature) : base(creature)
         {
@@ -748,7 +748,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             }
         }
 
-        public override void WaypointReached(uint waypointId)
+        public override void WaypointReached(uint waypointId, uint pathId)
         {
             switch (waypointId)
             {
@@ -780,7 +780,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             }
         }
 
-        public override void WaypointStart(uint waypointId)
+        public override void WaypointStarted(uint waypointId, uint pathId)
         {
             _currentWPid = waypointId;
             switch (waypointId)

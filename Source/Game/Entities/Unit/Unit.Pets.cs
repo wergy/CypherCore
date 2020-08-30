@@ -17,11 +17,11 @@
 
 using Framework.Constants;
 using Game.AI;
+using Game.Movement;
 using Game.Networking.Packets;
 using Game.Spells;
 using System.Collections.Generic;
 using System.Linq;
-using Framework.Constants;
 
 namespace Game.Entities
 {
@@ -314,7 +314,7 @@ namespace Game.Entities
 
             CastStop();
             CombatStop(); // @todo CombatStop(true) may cause crash (interrupt spells)
-            DeleteThreatList();
+            GetThreatManager().ClearAllThreat();
 
             Player playerCharmer = charmer.ToPlayer();
 
@@ -352,8 +352,15 @@ namespace Game.Entities
 
             if (IsTypeId(TypeId.Unit))
             {
+                IMovementGenerator movementGenerator = GetMotionMaster().GetMotionSlot(MovementSlot.Idle);
+                if (movementGenerator != null)
+                    movementGenerator.Pause(0);
+
+                GetMotionMaster().Clear(MovementSlot.Active);
+
+                StopMoving();
+
                 ToCreature().GetAI().OnCharmed(true);
-                GetMotionMaster().MoveIdle();
             }
             else
             {
@@ -457,7 +464,7 @@ namespace Game.Entities
             CastStop();
             CombatStop(); // @todo CombatStop(true) may cause crash (interrupt spells)
             GetHostileRefManager().DeleteReferences();
-            DeleteThreatList();
+            GetThreatManager().ClearAllThreat();
 
             if (_oldFactionId != 0)
             {
@@ -467,6 +474,7 @@ namespace Game.Entities
             else
                 RestoreFaction();
 
+            ///@todo Handle SLOT_IDLE motion resume
             GetMotionMaster().InitDefault();
 
             Creature creature = ToCreature();

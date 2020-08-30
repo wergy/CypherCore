@@ -554,7 +554,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             Index = 0xFFFFFFFF;
 
             BurningPitchId = Instance.GetData(DataTypes.TeamInInstance) == (uint)Team.Horde ? GunshipSpells.BurningPitchA : GunshipSpells.BurningPitchH;
-            me.SetRegeneratingHealth(false);
+            me.SetRegenerateHealth(false);
         }
 
         public override void SetData(uint type, uint data)
@@ -587,7 +587,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             if (!me.IsAlive() || !me.IsInCombat())
                 return;
 
-            me.DeleteThreatList();
+            me.GetThreatManager().ClearAllThreat();
             me.CombatStop(true);
             me.GetMotionMaster().MoveTargetedHome();
         }
@@ -680,7 +680,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             _summonedFirstMage = false;
             _died = false;
 
-            me.SetRegeneratingHealth(false);
+            me.SetRegenerateHealth(false);
         }
 
         public override void DamageTaken(Unit source, ref uint damage)
@@ -733,10 +733,9 @@ namespace Scripts.Northrend.IcecrownCitadel
             foreach (var stalker in creatures)
             {
                 stalker.RemoveAllAuras();
-                stalker.DeleteThreatList();
+                stalker.GetThreatManager().ClearAllThreat();
                 stalker.CombatStop(true);
             }
-
 
             uint explosionSpell = isVictory ? GunshipSpells.ExplosionVictory : GunshipSpells.ExplosionWipe;
             creatures.Clear();
@@ -845,7 +844,7 @@ namespace Scripts.Northrend.IcecrownCitadel
 
             _controller.ResetSlots(Team.Horde);
             _controller.SetTransport(creature.GetTransport());
-            me.SetRegeneratingHealth(false);
+            me.SetRegenerateHealth(false);
             me.m_CombatDistance = 70.0f;
         }
 
@@ -872,7 +871,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             if (!me.IsAlive())
                 return;
 
-            me.DeleteThreatList();
+            me.GetThreatManager().ClearAllThreat();
             me.CombatStop(true);
             me.GetMotionMaster().MoveTargetedHome();
 
@@ -1105,7 +1104,7 @@ namespace Scripts.Northrend.IcecrownCitadel
 
             _controller.ResetSlots(Team.Alliance);
             _controller.SetTransport(creature.GetTransport());
-            me.SetRegeneratingHealth(false);
+            me.SetRegenerateHealth(false);
             me.m_CombatDistance = 70.0f;
         }
 
@@ -1132,7 +1131,7 @@ namespace Scripts.Northrend.IcecrownCitadel
             if (!me.IsAlive())
                 return;
 
-            me.DeleteThreatList();
+            me.GetThreatManager().ClearAllThreat();
             me.CombatStop(true);
             me.GetMotionMaster().MoveTargetedHome();
 
@@ -1442,7 +1441,7 @@ namespace Scripts.Northrend.IcecrownCitadel
                 {
                     players.Sort(new ObjectDistanceOrderPred(me));
                     foreach (var pl in players)
-                        me.AddThreat(pl, 1.0f);
+                        AddThreat(pl, 1.0f);
 
                     AttackStart(players.First());
                 }

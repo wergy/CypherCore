@@ -192,6 +192,7 @@ namespace Game.Entities
             }
 
             SetMap(Global.MapMgr.CreateMap(info.MapId, this));
+            UpdatePositionData();
 
             PowerType powertype = cEntry.DisplayPower;
 
@@ -2411,7 +2412,7 @@ namespace Game.Entities
                     }
 
                     menu.GetGossipMenu().AddMenuItem((int)menuItems.OptionIndex, menuItems.OptionIcon, strOptionText, 0, (uint)menuItems.OptionType, strBoxText, menuItems.BoxMoney, menuItems.BoxCoded);
-                    menu.GetGossipMenu().AddGossipMenuItemData(menuItems.OptionIndex, menuItems.ActionMenuId, menuItems.ActionPoiId, menuItems.TrainerId);
+                    menu.GetGossipMenu().AddGossipMenuItemData(menuItems.OptionIndex, menuItems.ActionMenuId, menuItems.ActionPoiId);
                 }
             }
         }
@@ -2509,7 +2510,7 @@ namespace Game.Entities
                     GetSession().SendStablePet(guid);
                     break;
                 case GossipOption.Trainer:
-                    GetSession().SendTrainerList(source.ToCreature(), menuItemData.TrainerId);
+                    GetSession().SendTrainerList(source.ToCreature(), Global.ObjectMgr.GetCreatureTrainerForGossipOption(source.GetEntry(), menuId, optionIndex));
                     break;
                 case GossipOption.Learndualspec:
                     break;
@@ -6349,7 +6350,7 @@ namespace Game.Entities
         }
         public void SendSysMessage(string str, params object[] args)
         {
-            new CommandHandler(Session).SendSysMessage(str, args);
+            new CommandHandler(Session).SendSysMessage(string.Format(str, args));
         }
         public void SendBuyError(BuyResult msg, Creature creature, uint item)
         {

@@ -283,19 +283,21 @@ namespace Game.Spells
                 ApplySpellMod(aurApp.GetTarget(), apply);
 
             // call scripts helping/replacing effect handlers
-            bool prevented = false;
+            bool prevented;
             if (apply)
                 prevented = GetBase().CallScriptEffectApplyHandlers(this, aurApp, mode);
             else
                 prevented = GetBase().CallScriptEffectRemoveHandlers(this, aurApp, mode);
 
-            // check if script events have removed the aura or if default effect prevention was requested
-            if ((apply && aurApp.HasRemoveMode()) || prevented)
+            // check if script events have removed the aura already
+            if (apply && aurApp.HasRemoveMode())
                 return;
 
-            Global.SpellMgr.GetAuraEffectHandler(GetAuraType()).Invoke(this, aurApp, mode, apply);
+            // call default effect handler if it wasn't prevented
+            if (!prevented)
+                Global.SpellMgr.GetAuraEffectHandler(GetAuraType()).Invoke(this, aurApp, mode, apply);
 
-            // check if script events have removed the aura or if default effect prevention was requested
+            // check if the default handler reemoved the aura
             if (apply && aurApp.HasRemoveMode())
                 return;
 
@@ -964,7 +966,6 @@ namespace Game.Spells
         [AuraEffectHandler(AuraType.Unk46)]
         [AuraEffectHandler(AuraType.Unk48)]
         [AuraEffectHandler(AuraType.PetDamageMulti)]
-        [AuraEffectHandler(AuraType.DetectAmore)]
         [AuraEffectHandler(AuraType.ModCriticalThreat)]
         [AuraEffectHandler(AuraType.ModCooldown)]
         [AuraEffectHandler(AuraType.Unk214)]
@@ -1175,6 +1176,43 @@ namespace Game.Spells
 
             // call functions which may have additional effects after chainging state of unit
             target.UpdateObjectVisibility();
+        }
+
+        [AuraEffectHandler(AuraType.DetectAmore)]
+        void HandleDetectAmore(AuraApplication aurApp, AuraEffectHandleModes mode, bool apply)
+        {
+            if (!mode.HasAnyFlag(AuraEffectHandleModes.SendForClientMask))
+                return;
+
+            Unit target = aurApp.GetTarget();
+
+            if (target.IsTypeId(TypeId.Player))
+                return;
+
+            if (apply)
+            {
+                Player playerTarget = target.ToPlayer();
+                if (playerTarget != null)
+                {
+                    playerTarget.AddAuraVision((PlayerFieldByte2Flags)(1 << (GetMiscValue() - 1)));
+                }
+            }
+            else
+            {
+                if (target.HasAuraType(AuraType.DetectAmore))
+                {
+                    var amoreAuras = target.GetAuraEffectsByType(AuraType.DetectAmore);
+                    foreach (var auraEffect in amoreAuras)
+                    {
+                        if (GetMiscValue() == auraEffect.GetMiscValue())
+                            return;
+                    }
+                }
+
+                Player playerTarget = target.ToPlayer();
+                if (playerTarget != null)
+                    playerTarget.RemoveAuraVision((PlayerFieldByte2Flags)(1 << (GetMiscValue() - 1)));
+            }
         }
 
         [AuraEffectHandler(AuraType.SpiritOfRedemption)]
@@ -4239,7 +4277,7 @@ namespace Game.Spells
                         case 1515:                                      // Tame beast
                             // FIX_ME: this is 2.0.12 threat effect replaced in 2.1.x by dummy aura, must be checked for correctness
                             if (caster != null && target.CanHaveThreatList())
-                                target.AddThreat(caster, 10.0f);
+                                target.GetThreatManager().AddThreat(caster, 10.0f);
                             break;
                         case 13139:                                     // net-o-matic
                             // root to self part of (root_target.charge.root_self sequence
@@ -5597,7 +5635,7 @@ namespace Game.Spells
                 HealInfo healInfo = new HealInfo(caster, caster, heal, GetSpellInfo(), GetSpellInfo().GetSchoolMask());
                 caster.HealBySpell(healInfo);
 
-                caster.GetHostileRefManager().ThreatAssist(caster, healInfo.GetEffectiveHeal() * 0.5f, GetSpellInfo());
+                caster.GetThreatManager().ForwardThreatForAssistingMe(caster, healInfo.GetEffectiveHeal() * 0.5f, GetSpellInfo());
                 caster.ProcSkillsAndAuras(caster, ProcFlags.DonePeriodic, ProcFlags.TakenPeriodic, ProcFlagsSpellType.Heal, ProcFlagsSpellPhase.None, hitMask, null, null, healInfo);
             }
 
@@ -5707,7 +5745,7 @@ namespace Game.Spells
             SpellPeriodicAuraLogInfo pInfo = new SpellPeriodicAuraLogInfo(this, heal, (uint)damage, heal - healInfo.GetEffectiveHeal(), healInfo.GetAbsorb(), 0, 0.0f, crit);
             target.SendPeriodicAuraLog(pInfo);
 
-            target.GetHostileRefManager().ThreatAssist(caster, healInfo.GetEffectiveHeal() * 0.5f, GetSpellInfo());
+            target.GetThreatManager().ForwardThreatForAssistingMe(caster, healInfo.GetEffectiveHeal() * 0.5f, GetSpellInfo());
 
             // %-based heal - does not proc auras
             if (GetAuraType() == AuraType.ObsModHealth)
@@ -5751,7 +5789,8 @@ namespace Game.Spells
             if (gainAmount != 0)
             {
                 gainedAmount = caster.ModifyPower(powerType, gainAmount);
-                target.AddThreat(caster, gainedAmount * 0.5f, GetSpellInfo().GetSchoolMask(), GetSpellInfo());
+                // energize is not modified by threat modifiers
+                target.GetThreatManager().AddThreat(caster, gainedAmount * 0.5f, GetSpellInfo(), true);
             }
 
             // Drain Mana
@@ -5801,7 +5840,7 @@ namespace Game.Spells
             int gain = target.ModifyPower(powerType, amount);
 
             if (caster != null)
-                target.GetHostileRefManager().ThreatAssist(caster, gain * 0.5f, GetSpellInfo());
+                target.GetThreatManager().ForwardThreatForAssistingMe(caster, gain * 0.5f, GetSpellInfo(), true);
 
             target.SendPeriodicAuraLog(pInfo);
         }
@@ -5829,7 +5868,7 @@ namespace Game.Spells
             int gain = target.ModifyPower(powerType, amount);
 
             if (caster != null)
-                target.GetHostileRefManager().ThreatAssist(caster, gain * 0.5f, GetSpellInfo());
+                target.GetThreatManager().ForwardThreatForAssistingMe(caster, gain * 0.5f, GetSpellInfo(), true);
 
             target.SendPeriodicAuraLog(pInfo);
         }

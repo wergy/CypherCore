@@ -17,6 +17,7 @@
 
 using Framework.Constants;
 using Game.Entities;
+using System;
 using System.Collections.Generic;
 
 namespace Game.Maps
@@ -80,10 +81,59 @@ namespace Game.Maps
             foreach (var guid in guid_set)
             {
                 T obj = new T();
-                if (!obj.LoadFromDB(guid, map))
-                    continue;
+                // Don't spawn at all if there's a respawn time
+                if ((obj.IsTypeId(TypeId.Unit) && map.GetCreatureRespawnTime(guid) == 0) || (obj.IsTypeId(TypeId.GameObject) && map.GetGORespawnTime(guid) == 0))
+                {
+                    //TC_LOG_INFO("misc", "DEBUG: LoadHelper from table: %s for (guid: %u) Loading", table, guid);
+                    if (obj.IsTypeId(TypeId.Unit))
+                    {
+                        CreatureData cdata = Global.ObjectMgr.GetCreatureData(guid);
+                        Cypher.Assert(cdata != null, $"Tried to load creature with spawnId {guid}, but no such creature exists.");
 
-                AddObjectHelper(cell, ref count, map, obj);
+                        SpawnGroupTemplateData group = cdata.spawnGroupData;
+                        // If creature in manual spawn group, don't spawn here, unless group is already active.
+                        if (!group.flags.HasAnyFlag(SpawnGroupFlags.System))
+                        {
+                            if (!map.IsSpawnGroupActive(group.groupId))
+                            {
+                                obj.Dispose();
+                                continue;
+                            }
+                        }
+
+                        // If script is blocking spawn, don't spawn but queue for a re-check in a little bit
+                        if (!group.flags.HasFlag(SpawnGroupFlags.CompatibilityMode) && !Global.ScriptMgr.CanSpawn(guid, cdata.Id, cdata, map))
+                        {
+                            map.SaveRespawnTime(SpawnObjectType.Creature, guid, cdata.Id, Time.UnixTime + RandomHelper.URand(4, 7), map.GetZoneId(PhasingHandler.EmptyPhaseShift, cdata.spawnPoint), GridDefines.ComputeGridCoord(cdata.spawnPoint.GetPositionX(), cdata.spawnPoint.GetPositionY()).GetId(), false);
+                            obj.Dispose();
+                            continue;
+                        }
+                    }
+                    else if (obj.IsTypeId(TypeId.GameObject))
+                    {
+                        // If gameobject in manual spawn group, don't spawn here, unless group is already active.
+                        GameObjectData godata = Global.ObjectMgr.GetGameObjectData(guid);
+                        Cypher.Assert(godata != null, $"Tried to load gameobject with spawnId {guid}, but no such object exists.");
+
+                        if (!godata.spawnGroupData.flags.HasAnyFlag(SpawnGroupFlags.System))
+                        {
+                            if (!map.IsSpawnGroupActive(godata.spawnGroupData.groupId))
+                            {
+                                obj.Dispose();
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (!obj.LoadFromDB(guid, map, false, false))
+                    {
+                        obj.Dispose();
+                        continue;
+                    }
+                    AddObjectHelper(cell, ref count, map, obj);
+                }
+                else
+                    obj.Dispose();
             }
         }
 
@@ -92,15 +142,10 @@ namespace Game.Maps
             var cell = new Cell(cellCoord);
             map.AddToGrid(obj, cell);
             obj.AddToWorld();
-            ++count;
-        }
 
-        void AddObjectHelper(CellCoord cellCoord, ref uint count, Map map, Creature obj)
-        {
-            map.AddToGrid(obj, new Cell(cellCoord));
-            obj.AddToWorld();
-            if (obj.IsActiveObject())
-                map.AddToActive(obj);
+            if (obj.IsCreature())
+                if (obj.IsActiveObject())
+                    map.AddToActive(obj);
 
             ++count;
         }
@@ -168,7 +213,7 @@ namespace Game.Maps
                 if (creature.IsInCombat() || !creature.GetThreatManager().IsThreatListsEmpty())
                 {
                     creature.CombatStop();
-                    creature.DeleteThreatList();
+                    creature.GetThreatManager().ClearAllThreat();
                     if (creature.IsAIEnabled)
                         creature.GetAI().EnterEvadeMode();
                 }

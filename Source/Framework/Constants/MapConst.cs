@@ -20,6 +20,8 @@ namespace Framework.Constants
 {
     public class MapConst
     {
+        public const uint InvalidZone = 0xFFFFFFFF;
+
         //Grids
         public const int MaxGrids = 64;
         public const float SizeofGrids = 533.33333f;
@@ -111,7 +113,7 @@ namespace Framework.Constants
         AreaTrigger = 0x20,
         Conversation = 0x40,
         All = 0x7F,
-        
+
         //GameObjects, Creatures(except pets), DynamicObject, Corpse(Bones), AreaTrigger
         AllGrid = GameObject | Creature | DynamicObject | Corpse | AreaTrigger | Conversation,
 
@@ -199,5 +201,43 @@ namespace Framework.Constants
         Gobject = 0x2, // check dynamic game object data
 
         All = Vmap | Gobject
+    }
+
+    public enum SpawnObjectType
+    {
+        Creature = 0,
+        GameObject = 1,
+
+        Max
+    }
+
+    public enum SpawnObjectTypeMask
+    {
+        Creature = (1 << SpawnObjectType.Creature),
+        GameObject = (1 << SpawnObjectType.GameObject),
+
+        All = (1 << SpawnObjectType.Max) - 1
+    }
+
+    [Flags]
+    public enum SpawnGroupFlags
+    {
+        None = 0x00,
+        System = 0x01,
+        CompatibilityMode = 0x02,
+        ManualSpawn = 0x04,
+        DynamicSpawnRate = 0x08,
+        EscortQuestNpc = 0x10,
+
+        All = (System | CompatibilityMode | ManualSpawn | DynamicSpawnRate | EscortQuestNpc)
+    }
+
+    [Flags]
+    public enum InstanceSpawnGroupFlags
+    {
+        ActivateSpawn = 0x01,
+        BlockSpawn = 0x02,
+
+        All = (ActivateSpawn | BlockSpawn)
     }
 }

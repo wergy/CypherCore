@@ -21,6 +21,7 @@ using Framework.GameMath;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Game.Networking.Packets;
+using Game.Maps;
 
 namespace Game.Entities
 {
@@ -514,6 +515,32 @@ namespace Game.Entities
                 case GameObjectTypes.GatheringNode:
                     return GatheringNode.LargeAOI != 0;
                 default: return false;
+            }
+        }
+
+        public uint GetSpellFocusType()
+        {
+            switch (type)
+            {
+                case GameObjectTypes.SpellFocus:
+                    return SpellFocus.spellFocusType;
+                case GameObjectTypes.UILink:
+                    return UILink.spellFocusType;
+                default:
+                    return 0;
+            }
+        }
+
+        public uint GetSpellFocusRadius()
+        {
+            switch (type)
+            {
+                case GameObjectTypes.SpellFocus:
+                    return SpellFocus.radius;
+                case GameObjectTypes.UILink:
+                    return UILink.radius;
+                default:
+                    return 0;
             }
         }
 
@@ -1248,25 +1275,13 @@ namespace Game.Entities
         public uint WorldEffectID;
     }
 
-    public class GameObjectData
+    public class GameObjectData : SpawnData
     {
-        public uint id;                                              // entry in gamobject_template
-        public ushort mapid;
-        public float posX;
-        public float posY;
-        public float posZ;
-        public float orientation;
         public Quaternion rotation;
-        public int spawntimesecs;
         public uint animprogress;
-        public GameObjectState go_state;
-        public List<Difficulty> spawnDifficulties = new List<Difficulty>();
+        public GameObjectState goState;
         public byte artKit;
-        public PhaseUseFlagsValues phaseUseFlags;
-        public uint phaseId;
-        public uint phaseGroup;
-        public int terrainSwapMap;
-        public uint ScriptId;
-        public bool dbData = true;
+
+        public GameObjectData() : base(SpawnObjectType.GameObject) { }
     }
 }

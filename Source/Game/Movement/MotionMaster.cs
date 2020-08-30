@@ -102,21 +102,15 @@ namespace Game.Movement
                 DirectClean(reset);
         }
 
-        void ClearExpireList()
+        public void Clear(MovementSlot slot)
         {
-            for (int i = 0; i < _expireList.Count; ++i)
-                DirectDelete(_expireList[i]);
+            if (Empty() || slot >= MovementSlot.Max)
+                return;
 
-            _expireList.Clear();
-
-            if (Empty())
-                Initialize();
-            else if (NeedInitTop())
-                InitTop();
-            else if (Convert.ToBoolean(_cleanFlag & MMCleanFlag.Reset))
-                Top().Reset(_owner);
-
-            _cleanFlag &= ~MMCleanFlag.Reset;
+            if (_cleanFlag.HasAnyFlag(MMCleanFlag.Update))
+                DelayedClean(slot);
+            else
+                DirectClean(slot);
         }
 
         public void MovementExpired(bool reset = true)
@@ -149,6 +143,12 @@ namespace Game.Movement
                 return _slot[(int)slot].GetMovementGeneratorType();
         }
 
+        public IMovementGenerator GetMotionSlot(MovementSlot slot)
+        {
+            Cypher.Assert((int)slot >= 0);
+            return _slot[(int)slot];
+        }
+
         public IMovementGenerator GetMotionSlot(int slot)
         {
             Cypher.Assert(slot >= 0);
@@ -157,11 +157,14 @@ namespace Game.Movement
 
         public void PropagateSpeedChange()
         {
-            for (int i = 0; i <= _top; ++i)
-            {
-                if (_slot[i] != null)
-                    _slot[i].UnitSpeedChanged();
-            }
+            if (Empty())
+                return;
+
+            IMovementGenerator movement = Top();
+            if (movement == null)
+                return;
+
+            movement.UnitSpeedChanged();
         }
 
         public bool GetDestination(out float x, out float y, out float z)
@@ -590,12 +593,17 @@ namespace Game.Movement
             StartMovement(new DistractMovementGenerator(timer), MovementSlot.Controlled);
         }
 
-        public void MovePath(uint path_id, bool repeatable)
+        public void MovePath(uint pathId, bool repeatable)
         {
-            if (path_id == 0)
+            if (pathId == 0)
                 return;
 
-            StartMovement(new WaypointMovementGenerator(path_id, repeatable), MovementSlot.Idle);
+            StartMovement(new WaypointMovementGenerator(pathId, repeatable), MovementSlot.Idle);
+        }
+
+        public void MovePath(WaypointPath path, bool repeatable)
+        {
+            StartMovement(new WaypointMovementGenerator(path, repeatable), MovementSlot.Idle);
         }
 
         void MoveRotate(uint time, RotateDirection direction)
@@ -606,7 +614,7 @@ namespace Game.Movement
             StartMovement(new RotateMovementGenerator(time, direction), MovementSlot.Active);
         }
 
-        public void MoveFormation(uint id, Position destination, uint moveType, bool forceRun = false, bool forceOrientation = false)
+        public void MoveFormation(uint id, Position destination, WaypointMoveType moveType, bool forceRun = false, bool forceOrientation = false)
         {
             if (_owner.GetTypeId() == TypeId.Unit)
                 StartMovement(new FormationMovementGenerator(id, destination, moveType, forceRun, forceOrientation), MovementSlot.Active);
@@ -681,6 +689,24 @@ namespace Game.Movement
                 Top().Reset(_owner);
         }
 
+        void DirectClean(MovementSlot slot)
+        {
+            IMovementGenerator motion = GetMotionSlot(slot);
+            if (motion != null)
+            {
+                _slot[(int)slot] = null;
+                DirectDelete(motion);
+            }
+
+            while (!Empty() && Top() == null)
+                --_top;
+
+            if (Empty())
+                Initialize();
+            else if (NeedInitTop())
+                InitTop();
+        }
+
         void DelayedClean()
         {
             while (Size() > 1)
@@ -690,6 +716,19 @@ namespace Game.Movement
                 if (curr != null)
                     DelayedDelete(curr);
             }
+        }
+
+        void DelayedClean(MovementSlot slot)
+        {
+            IMovementGenerator motion = GetMotionSlot(slot);
+            if (motion != null)
+            {
+                _slot[(int)slot] = null;
+                DelayedDelete(motion);
+            }
+
+            while (!Empty() && Top() == null)
+                --_top;
         }
 
         void DirectExpire(bool reset)
@@ -738,6 +777,23 @@ namespace Game.Movement
                 return;
 
             _expireList.Add(curr);
+        }
+
+        void ClearExpireList()
+        {
+            for (int i = 0; i < _expireList.Count; ++i)
+                DirectDelete(_expireList[i]);
+
+            _expireList.Clear();
+
+            if (Empty())
+                Initialize();
+            else if (NeedInitTop())
+                InitTop();
+            else if (_cleanFlag.HasAnyFlag(MMCleanFlag.Reset))
+                Top().Reset(_owner);
+
+            _cleanFlag &= ~MMCleanFlag.Reset;
         }
 
         public bool Empty() { return (_top < 0); }

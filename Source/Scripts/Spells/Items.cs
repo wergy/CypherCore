@@ -273,8 +273,9 @@ namespace Scripts.Spells.Items
         public const uint BrewfestMountTransformReverse = 52845;
 
         //Nitroboots
-        public const uint NitroBootsSuccess = 54861;
-        public const uint NitroBootsBackfire = 46014;
+        public const uint NitroBoostsSuccess = 54861;
+        public const uint NitroBoostsBackfire = 46014;
+        public const uint NitroBoostsParachute = 54649;
 
         //Teachlanguage
         public const uint LearnGnomishBinary = 50242;
@@ -2491,7 +2492,7 @@ namespace Scripts.Spells.Items
     }
 
     [Script]
-    class spell_item_nitro_boots : SpellScript
+    class spell_item_nitro_boosts : SpellScript
     {
         public override bool Load()
         {
@@ -2502,14 +2503,17 @@ namespace Scripts.Spells.Items
 
         public override bool Validate(SpellInfo spell)
         {
-            return ValidateSpellInfo(SpellIds.NitroBootsSuccess, SpellIds.NitroBootsBackfire);
+            return ValidateSpellInfo(SpellIds.NitroBoostsSuccess, SpellIds.NitroBoostsBackfire);
         }
 
         void HandleDummy(uint effIndex)
         {
             Unit caster = GetCaster();
-            bool success = caster.GetMap().IsDungeon() || RandomHelper.randChance(95);
-            caster.CastSpell(caster, success ? SpellIds.NitroBootsSuccess : SpellIds.NitroBootsBackfire, true, GetCastItem());
+            AreaTableRecord areaEntry = CliDB.AreaTableStorage.LookupByKey(caster.GetAreaId());
+            bool success = true;
+            if (areaEntry != null && areaEntry.IsFlyable() && !caster.GetMap().IsDungeon())
+                success = RandomHelper.randChance(95);
+            caster.CastSpell(caster, success ? SpellIds.NitroBoostsSuccess : SpellIds.NitroBoostsBackfire, true, GetCastItem());
         }
 
         public override void Register()
@@ -2518,6 +2522,42 @@ namespace Scripts.Spells.Items
         }
     }
 
+    [Script]
+    class spell_item_nitro_boosts_backfire : AuraScript
+    {
+        public override bool Validate(SpellInfo spell)
+        {
+            return ValidateSpellInfo(SpellIds.NitroBoostsParachute);
+        }
+
+        void HandleApply(AuraEffect effect, AuraEffectHandleModes mode)
+        {
+            lastZ = GetTarget().GetPositionZ();
+        }
+
+        void HandlePeriodicDummy(AuraEffect effect)
+        {
+            PreventDefaultAction();
+            float curZ = GetTarget().GetPositionZ();
+            if (curZ < lastZ)
+            {
+                if (RandomHelper.randChance(80)) // we don't have enough sniffs to verify this, guesstimate
+                    GetTarget().CastSpell(GetTarget(), SpellIds.NitroBoostsParachute, true, null, effect);
+                GetAura().Remove();
+            }
+            else
+                lastZ = curZ;
+        }
+
+        public override void Register()
+        {
+            OnEffectApply.Add(new EffectApplyHandler(HandleApply, 1, AuraType.PeriodicTriggerSpell, AuraEffectHandleModes.Real));
+            OnEffectPeriodic.Add(new EffectPeriodicHandler(HandlePeriodicDummy, 1, AuraType.PeriodicTriggerSpell));
+        }
+
+        float lastZ = MapConst.InvalidHeight;
+    }
+    
     [Script]
     class spell_item_teach_language : SpellScript
     {

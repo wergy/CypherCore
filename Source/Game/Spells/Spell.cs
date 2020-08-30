@@ -1938,7 +1938,7 @@ namespace Game.Spells
 
                 HealInfo healInfo = new HealInfo(caster, unitTarget, addhealth, m_spellInfo, m_spellInfo.GetSchoolMask());
                 caster.HealBySpell(healInfo, crit);
-                unitTarget.GetHostileRefManager().ThreatAssist(caster, healInfo.GetEffectiveHeal() * 0.5f, m_spellInfo);
+                unitTarget.GetThreatManager().ForwardThreatForAssistingMe(caster, healInfo.GetEffectiveHeal() * 0.5f, m_spellInfo);
                 m_healing = (int)healInfo.GetEffectiveHeal();
 
                 // Do triggers for unit
@@ -2007,8 +2007,7 @@ namespace Game.Spells
                 if (missInfo == SpellMissInfo.Resist && m_spellInfo.HasAttribute(SpellCustomAttributes.PickPocket) && unitTarget.IsTypeId(TypeId.Unit))
                 {
                     m_caster.RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags.Talk);
-                    if (unitTarget.ToCreature().IsAIEnabled)
-                        unitTarget.ToCreature().GetAI().AttackStart(m_caster);
+                    unitTarget.ToCreature().EngageWithTarget(m_caster);
                 }
             }
 
@@ -2102,20 +2101,24 @@ namespace Game.Spells
                     // for delayed spells ignore negative spells (after duel end) for friendly targets
                     // @todo this cause soul transfer bugged
                     // 63881 - Malady of the Mind jump spell (Yogg-Saron)
-                    if (m_spellInfo.HasHitDelay() && unit.IsTypeId(TypeId.Player) && !m_spellInfo.IsPositive() && m_spellInfo.Id != 63881)
+                    // 45034 - Curse of Boundless Agony jump spell (Kalecgos)
+                    if (m_spellInfo.HasHitDelay() && unit.IsPlayer() && !m_spellInfo.IsPositive() && m_spellInfo.Id != 63881 && m_spellInfo.Id != 45034)
                         return SpellMissInfo.Evade;
 
                     // assisting case, healing and resurrection
                     if (unit.HasUnitState(UnitState.AttackPlayer))
                     {
-                        m_caster.SetContestedPvP();
-                        if (m_caster.IsTypeId(TypeId.Player))
-                            m_caster.ToPlayer().UpdatePvP(true);
+                        Player playerOwner = m_caster.GetCharmerOrOwnerPlayerOrPlayerItself();
+                        if (playerOwner != null)
+                        {
+                            playerOwner.SetContestedPvP();
+                            playerOwner.UpdatePvP(true);
+                        }
                     }
                     if (unit.IsInCombat() && m_spellInfo.HasInitialAggro())
                     {
                         m_caster.SetInCombatState(unit.GetCombatTimer() > 0, unit);
-                        unit.GetHostileRefManager().ThreatAssist(m_caster, 0.0f);
+                        unit.GetThreatManager().ForwardThreatForAssistingMe(m_caster, 0.0f, null, true);
                     }
                 }
             }
@@ -2835,6 +2838,13 @@ namespace Game.Spells
 
             // we must send smsg_spell_go packet before m_castItem delete in TakeCastItem()...
             SendSpellGo();
+
+            if (!m_spellInfo.IsChanneled())
+            {
+                Creature creatureCaster = m_caster.ToCreature();
+                if (creatureCaster != null)
+                    creatureCaster.ReleaseFocus(this);
+            }
 
             // Okay, everything is prepared. Now we need to distinguish between immediate and evented delayed spells
             if ((m_spellInfo.HasHitDelay() && !m_spellInfo.IsChanneled()) || m_spellInfo.HasAttribute(SpellAttr4.Unk4))
@@ -4377,14 +4387,14 @@ namespace Game.Spells
 
                 // positive spells distribute threat among all units that are in combat with target, like healing
                 if (m_spellInfo.IsPositive())
-                    target.GetHostileRefManager().ThreatAssist(m_caster, threatToAdd, m_spellInfo);
+                    target.GetThreatManager().ForwardThreatForAssistingMe(m_caster, threatToAdd, m_spellInfo);
                 // for negative spells threat gets distributed among affected targets
                 else
                 {
                     if (!target.CanHaveThreatList())
                         continue;
 
-                    target.AddThreat(m_caster, threatToAdd, m_spellInfo.GetSchoolMask(), m_spellInfo);
+                    target.GetThreatManager().AddThreat(m_caster, threatToAdd, m_spellInfo, true);
                 }
             }
             Log.outDebug(LogFilter.Spells, "Spell {0}, added an additional {1} threat for {2} {3} target(s)", m_spellInfo.Id, threat, m_spellInfo.IsPositive() ? "assisting" : "harming", m_UniqueTargetInfo.Count);
@@ -4416,6 +4426,15 @@ namespace Game.Spells
                 Global.SpellMgr.GetSpellEffectHandler(eff).Invoke(this, i);
         }
 
+        public static Spell ExtractSpellFromEvent(BasicEvent basicEvent)
+        {
+            SpellEvent spellEvent = (SpellEvent)basicEvent;
+            if (spellEvent != null)
+                return spellEvent.GetSpell();
+
+            return null;
+        }
+        
         public SpellCastResult CheckCast(bool strict)
         {
             uint param1 = 0, param2 = 0;
@@ -7996,16 +8015,20 @@ namespace Game.Spells
             m_Spell.GetCaster().m_Events.AddEvent(this, e_time + 1, false);
             return false;                                           // event not complete
         }
+
         public override void Abort(ulong e_time)
         {
             // oops, the spell we try to do is aborted
             if (m_Spell.GetState() != SpellState.Finished)
                 m_Spell.Cancel();
         }
+
         public override bool IsDeletable()
         {
             return m_Spell.IsDeletable();
         }
+
+        public Spell GetSpell() { return m_Spell; }
 
         Spell m_Spell;
     }

@@ -148,16 +148,17 @@ namespace Game.Entities
 
         public void UpdateZone(uint newZone, uint newArea)
         {
-            if (m_zoneUpdateId != newZone)
+            uint oldZone = m_zoneUpdateId;
+            m_zoneUpdateId = newZone;
+            m_zoneUpdateTimer = 1 * Time.InMilliseconds;
+
+            GetMap().UpdatePlayerZoneStats(oldZone, newZone);
+
+            // call leave script hooks immedately (before updating flags)
+            if (oldZone != newZone)
             {
                 Global.OutdoorPvPMgr.HandlePlayerLeaveZone(this, m_zoneUpdateId);
-                Global.OutdoorPvPMgr.HandlePlayerEnterZone(this, newZone);
                 Global.BattleFieldMgr.HandlePlayerLeaveZone(this, m_zoneUpdateId);
-                Global.BattleFieldMgr.HandlePlayerEnterZone(this, newZone);
-                SendInitWorldStates(newZone, newArea);              // only if really enters to new zone, not just area change, works strange...
-                Guild guild = GetGuild();
-                if (guild)
-                    guild.UpdateMemberData(this, GuildMemberData.ZoneId, newZone);
             }
 
             // group update
@@ -170,9 +171,6 @@ namespace Game.Entities
                     pet.SetGroupUpdateFlag(GroupUpdatePetFlags.Full);
             }
 
-            m_zoneUpdateId = newZone;
-            m_zoneUpdateTimer = 1 * Time.InMilliseconds;
-
             // zone changed, so area changed as well, update it
             UpdateArea(newArea);
 
@@ -184,8 +182,6 @@ namespace Game.Entities
                 GetMap().GetOrGenerateZoneDefaultWeather(newZone);
 
             GetMap().SendZoneDynamicInfo(newZone, this);
-
-            Global.ScriptMgr.OnPlayerUpdateZone(this, newZone, newArea);
 
             // in PvP, any not controlled zone (except zone.team == 6, default case)
             // in PvE, only opposition team capital
@@ -232,6 +228,18 @@ namespace Game.Entities
             UpdateLocalChannels(newZone);
 
             UpdateZoneDependentAuras(newZone);
+
+            // call enter script hooks after everyting else has processed
+            Global.ScriptMgr.OnPlayerUpdateZone(this, newZone, newArea);
+            if (oldZone != newZone)
+            { 
+                Global.OutdoorPvPMgr.HandlePlayerEnterZone(this, newZone);
+                Global.BattleFieldMgr.HandlePlayerEnterZone(this, newZone);
+                SendInitWorldStates(newZone, newArea);              // only if really enters to new zone, not just area change, works strange...
+                Guild guild = GetGuild();
+                if (guild)
+                    guild.UpdateMemberData(this, GuildMemberData.ZoneId, newZone);
+            }
         }
 
         public InstanceBind GetBoundInstance(uint mapid, Difficulty difficulty, bool withExpired = false)

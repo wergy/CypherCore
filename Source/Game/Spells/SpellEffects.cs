@@ -1942,7 +1942,7 @@ namespace Game.Spells
                 return;
 
             // Check for possible target
-            if (unitTarget == null || unitTarget.IsInCombat())
+            if (unitTarget == null || unitTarget.IsEngaged())
                 return;
 
             // target must be OK to do this
@@ -2701,7 +2701,7 @@ namespace Game.Spells
             if (!unitTarget.CanHaveThreatList())
                 return;
 
-            unitTarget.AddThreat(m_caster, damage);
+            unitTarget.GetThreatManager().AddThreat(m_caster, damage);
         }
 
         [SpellEffectHandler(SpellEffectName.HealMaxHealth)]
@@ -4043,9 +4043,12 @@ namespace Game.Spells
             if (effectHandleMode == SpellEffectHandleMode.Launch)
             {
                 Position pos = destTarget.GetPosition();
-                float angle = m_caster.GetRelativeAngle(pos.posX, pos.posY);
-                float dist = m_caster.GetDistance(pos);
-                pos = m_caster.GetFirstCollisionPosition(dist, angle);
+                if (!m_caster.IsWithinLOS(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ()))
+                {
+                    float angle = m_caster.GetRelativeAngle(pos.posX, pos.posY);
+                    float dist = m_caster.GetDistance(pos);
+                    pos = m_caster.GetFirstCollisionPosition(dist, angle);
+                }
 
                 m_caster.GetMotionMaster().MoveCharge(pos.posX, pos.posY, pos.posZ);
             }
@@ -4408,7 +4411,7 @@ namespace Game.Spells
             if (unitTarget == null)
                 return;
 
-            unitTarget.GetThreatManager().ModifyThreatPercent(m_caster, damage);
+            unitTarget.GetThreatManager().ModifyThreatByPercent(m_caster, damage);
         }
 
         [SpellEffectHandler(SpellEffectName.TransDoor)]
